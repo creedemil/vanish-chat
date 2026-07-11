@@ -60,7 +60,7 @@ function connectWebSocket() {
     state.socket.close();
   }
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}`;
 
   updateConnectionStatus('connecting');
@@ -208,6 +208,12 @@ async function toggleVoiceCall() {
 async function joinVoiceCall() {
   if (state.socket.readyState !== WebSocket.OPEN) {
     alert("Cannot join voice call: Server disconnected.");
+    return;
+  }
+
+  // Guard clause: Media devices require a secure connection (HTTPS)
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Voice calling requires a secure connection. Please make sure the URL starts with https://");
     return;
   }
 
