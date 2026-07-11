@@ -12,6 +12,12 @@ const wss = new WebSocket.Server({ server });
 const PORT = process.env.PORT || 8088;
 const DB_PATH = path.join(__dirname, 'chat.db');
 
+// Shared Chat Room Password
+const CHAT_PASSWORD = 'safechat';
+
+// Active voice call users list (username -> WebSocket)
+const voiceUsers = new Map();
+
 // Initialize SQLite Database
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
@@ -55,10 +61,10 @@ function pruneExpiredMessages() {
     } else if (this.changes > 0) {
       console.log(`Pruned ${this.changes} expired messages from database.`);
       
-      // Broadcast prune event to all connected clients so they clean their screens instantly
+      // Broadcast prune event to authenticated clients
       const pruneNotice = JSON.stringify({ type: 'prune', cutoff });
       wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
+        if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
           client.send(pruneNotice);
         }
       });
@@ -73,69 +79,160 @@ setTimeout(pruneExpiredMessages, 5000);
 
 // WebSocket real-time communication
 wss.on('connection', (ws) => {
-  console.log('New client connected.');
+  console.log('A client connected (unauthenticated).');
+  ws.isAuthenticated = false;
+  ws.username = null;
 
-  // 1. Send chat history to newly connected client
-  db.all("SELECT * FROM messages ORDER BY timestamp ASC", [], (err, rows) => {
-    if (err) {
-      console.error('Failed to load history:', err.message);
-      return;
-    }
-    
-    // Send history packet
-    ws.send(JSON.stringify({
-      type: 'history',
-      messages: rows
-    }));
-  });
-
-  // 2. Handle incoming client messages
+  // Handle incoming client messages
   ws.on('message', (messageString) => {
     try {
       const data = JSON.parse(messageString);
-      
+
+      // --- AUTHENTICATION PHASE ---
+      if (data.type === 'join') {
+        const { username, password } = data;
+
+        if (password !== CHAT_PASSWORD) {
+          ws.send(JSON.stringify({
+            type: 'auth-error',
+            message: 'Wrong password! Access denied.'
+          }));
+          ws.close();
+          return;
+        }
+
+        // Authenticate connection
+        ws.isAuthenticated = true;
+        ws.username = username;
+        console.log(`User authenticated: ${username}`);
+
+        // Send chat history
+        db.all("SELECT * FROM messages ORDER BY timestamp ASC", [], (err, rows) => {
+          if (err) {
+            console.error('Failed to load history:', err.message);
+            return;
+          }
+          ws.send(JSON.stringify({
+            type: 'history',
+            messages: rows
+          }));
+
+          // Send current voice participants list
+          ws.send(JSON.stringify({
+            type: 'voice-users-list',
+            users: Array.from(voiceUsers.keys())
+          }));
+        });
+        return;
+      }
+
+      // Drop messages from unauthenticated sockets
+      if (!ws.isAuthenticated) {
+        ws.close();
+        return;
+      }
+
+      // --- AUTHENTICATED CHAT MESSAGE ---
       if (data.type === 'message') {
-        const { username, text, image } = data;
+        const { text, image } = data;
         const timestamp = Date.now();
 
         // Save to SQLite
         db.run(
           "INSERT INTO messages (username, text, image, timestamp) VALUES (?, ?, ?, ?)",
-          [username, text, image, timestamp],
+          [ws.username, text, image, timestamp],
           function(err) {
             if (err) {
               console.error('Failed to save message:', err.message);
               return;
             }
 
-            // Construct broadcast packet with database ID
+            // Broadcast message
             const broadcastMsg = JSON.stringify({
               type: 'message',
               message: {
                 id: this.lastID,
-                username,
+                username: ws.username,
                 text,
                 image,
                 timestamp
               }
             });
 
-            // Broadcast message to ALL connected clients
             wss.clients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
+              if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
                 client.send(broadcastMsg);
               }
             });
           }
         );
       }
+
+      // --- WEBRTC VOICE CALL STATE CHANNEL ---
+      else if (data.type === 'voice-state') {
+        const { joined } = data;
+        if (joined) {
+          voiceUsers.set(ws.username, ws);
+          console.log(`${ws.username} joined voice call.`);
+        } else {
+          voiceUsers.delete(ws.username);
+          console.log(`${ws.username} left voice call.`);
+        }
+
+        // Broadcast updated voice users list to everyone
+        const listNotice = JSON.stringify({
+          type: 'voice-users-list',
+          users: Array.from(voiceUsers.keys())
+        });
+        
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
+            client.send(listNotice);
+          }
+        });
+      }
+
+      // --- WEBRTC SIGNALING RELAY ---
+      else if (data.type === 'signal') {
+        const { to, signal } = data;
+        const targetWs = voiceUsers.get(to);
+        
+        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+          targetWs.send(JSON.stringify({
+            type: 'signal',
+            from: ws.username,
+            signal: signal
+          }));
+        }
+      }
+
     } catch (parseErr) {
       console.error('Error parsing client payload:', parseErr.message);
     }
   });
 
+  // Client connection teardown
   ws.on('close', () => {
-    console.log('Client disconnected.');
+    if (ws.username) {
+      console.log(`User left: ${ws.username}`);
+      
+      // Remove from voice list if they were speaking
+      if (voiceUsers.has(ws.username)) {
+        voiceUsers.delete(ws.username);
+        
+        // Broadcast updated voice users list
+        const listNotice = JSON.stringify({
+          type: 'voice-users-list',
+          users: Array.from(voiceUsers.keys())
+        });
+        
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
+            client.send(listNotice);
+          }
+        });
+      }
+    }
   });
 });
 

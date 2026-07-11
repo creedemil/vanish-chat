@@ -35,6 +35,7 @@
       
       <form id="loginForm">
         <input type="text" id="nicknameInput" placeholder="Choose a nickname..." required maxlength="15" autocomplete="off">
+        <input type="password" id="passwordInput" placeholder="Enter room password..." required autocomplete="off">
         <button type="submit" class="btn btn-primary btn-block">Enter Chatroom</button>
       </form>
     </div>
@@ -63,6 +64,19 @@
           </span>
         </div>
       </header>
+
+      <!-- Voice Call Connection Panel -->
+      <div class="voice-bar" id="voiceBar">
+        <div class="voice-bar-left">
+          <button type="button" class="voice-btn voice-btn-disconnected" id="voiceBtn">
+            <i data-lucide="phone"></i> <span id="voiceBtnText">Join Call</span>
+          </button>
+          <span class="voice-status-text" id="voiceStatusText">Voice call inactive</span>
+        </div>
+        <div class="active-speakers" id="activeSpeakers">
+          <!-- Active speakers rendered dynamically -->
+        </div>
+      </div>
 
       <!-- Message Area -->
       <section class="messages-container" id="messagesContainer">
