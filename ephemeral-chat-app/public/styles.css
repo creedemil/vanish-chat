@@ -99,7 +99,7 @@ body {
   opacity: 0.08;
 }
 
-/* Login Overlay Form */
+/* Nickname Overlay */
 .login-overlay {
   position: fixed;
   top: 0;
@@ -206,13 +206,13 @@ body {
   color: var(--text-muted);
 }
 
-/* App Containers */
+/* Main Container Layout */
 .app-container {
   display: flex;
   width: 95vw;
   height: 90vh;
   height: 90dvh;
-  max-width: 860px;
+  max-width: 760px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-glass);
   border-radius: 24px;
@@ -291,7 +291,7 @@ body {
   gap: 12px;
 }
 
-/* Status Indicator */
+/* Status Badge */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -334,7 +334,7 @@ body {
   50% { opacity: 0.4; }
 }
 
-/* Button UI */
+/* Button styles */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -439,7 +439,7 @@ body {
   line-height: 1.5;
 }
 
-/* Message Wrapper bubble */
+/* Message bubble wrapping */
 .message-wrapper {
   display: flex;
   flex-direction: column;
@@ -528,15 +528,20 @@ body {
   border-top-right-radius: 4px;
 }
 
-/* Attachments inside Chat Bubble (Images/Videos) */
+/* Photo attachments inside messages */
 .message-attachment {
   margin-top: 8px;
   border-radius: 12px;
   overflow: hidden;
   max-width: 100%;
-  max-height: 320px;
+  max-height: 240px;
+  cursor: zoom-in;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: var(--transition-smooth);
+}
+
+.message-attachment:hover {
+  opacity: 0.9;
 }
 
 .message-attachment img {
@@ -544,16 +549,6 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
-  cursor: zoom-in;
-}
-
-.message-attachment video {
-  width: 100%;
-  max-height: 300px;
-  display: block;
-  outline: none;
-  background-color: #000;
-  border-radius: 12px;
 }
 
 /* Expiry decay visual bar inside message */
@@ -571,7 +566,7 @@ body {
 }
 
 /* ==========================================================================
-   IMAGE/VIDEO ATTACHMENT PREVIEW BAR
+   IMAGE ATTACHMENT PREVIEW BAR
    ========================================================================== */
 
 .attachment-preview-bar {
@@ -599,17 +594,10 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-#mediaPreviewContainer {
-  width: 100%;
-  height: 100%;
-}
-
-#mediaPreviewContainer img,
-#mediaPreviewContainer video {
+.preview-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
 .remove-preview-btn {
@@ -729,7 +717,6 @@ body {
   cursor: pointer;
   transition: var(--transition-smooth);
   box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3);
-  position: relative;
 }
 
 .send-btn:hover {
@@ -746,21 +733,6 @@ body {
   width: 18px;
   height: 18px;
   margin-left: 2px;
-}
-
-/* Upload Loader spinner inside button */
-.btn-loader {
-  display: none;
-  width: 18px;
-  height: 18px;
-  border: 2.5px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ==========================================================================

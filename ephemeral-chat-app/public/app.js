@@ -2,7 +2,7 @@
 const state = {
   username: null,
   socket: null,
-  selectedFile: null,
+  selectedImageBase64: null,
   reconnectTimer: null
 };
 
@@ -21,16 +21,12 @@ const elements = {
   fileInput: document.getElementById('fileInput'),
   attachBtn: document.getElementById('attachBtn'),
   attachmentPreviewBar: document.getElementById('attachmentPreviewBar'),
-  mediaPreviewContainer: document.getElementById('mediaPreviewContainer'),
+  imagePreview: document.getElementById('imagePreview'),
   removePreviewBtn: document.getElementById('removePreviewBtn'),
   emptyState: document.getElementById('emptyState'),
   
   connBadge: document.getElementById('connBadge'),
   connText: document.getElementById('connText'),
-  
-  sendBtn: document.getElementById('sendBtn'),
-  sendIcon: document.getElementById('sendIcon'),
-  sendLoader: document.getElementById('sendLoader'),
   
   lightboxModal: document.getElementById('lightboxModal'),
   lightboxImage: document.getElementById('lightboxImage'),
@@ -38,7 +34,7 @@ const elements = {
 };
 
 // ==========================================================================
-// WEBSOCKET SERVER CONNECTIONS
+// WEBSOCKET SERVER CONNECTION & AUTHENTICATION
 // ==========================================================================
 
 function connectWebSocket() {
@@ -147,7 +143,7 @@ function updateConnectionStatus(status) {
 }
 
 // ==========================================================================
-// RENDERING MEDIA BUBBLES
+// RENDER BUBBLES
 // ==========================================================================
 
 function getCountdownText(timestamp) {
@@ -192,23 +188,13 @@ function appendMessageBubbleToDOM(msg) {
   el.dataset.id = msg.id;
   el.setAttribute('data-timestamp', msg.timestamp);
   
-  // Render media attachments (images vs videos)
   let attachmentHTML = '';
-  if (msg.fileUrl) {
-    const isVideo = msg.fileType && msg.fileType.startsWith('video/');
-    if (isVideo) {
-      attachmentHTML = `
-        <div class="message-attachment">
-          <video controls playsinline preload="metadata" src="${msg.fileUrl}"></video>
-        </div>
-      `;
-    } else {
-      attachmentHTML = `
-        <div class="message-attachment" onclick="openLightbox('${msg.fileUrl}')">
-          <img src="${msg.fileUrl}" alt="Attached image">
-        </div>
-      `;
-    }
+  if (msg.image) {
+    attachmentHTML = `
+      <div class="message-attachment" onclick="openLightbox('${msg.image}')">
+        <img src="${msg.image}" alt="Attached media">
+      </div>
+    `;
   }
   
   el.innerHTML = `
@@ -240,47 +226,55 @@ function escapeHtml(text) {
 }
 
 // ==========================================================================
-// FILE ATTACHMENT SELECTOR (IMAGES & VIDEOS)
+// CLIENT-SIDE IMAGE COMPRESSION (BASE64)
 // ==========================================================================
 
-function handleFileSelect(e) {
+function handleImageSelect(e) {
   const file = e.target.files[0];
   if (!file) return;
 
-  state.selectedFile = file;
-  elements.mediaPreviewContainer.innerHTML = '';
-
-  const isVideo = file.type.startsWith('video/');
   const reader = new FileReader();
-
   reader.onload = function(event) {
-    if (isVideo) {
-      const video = document.createElement('video');
-      video.src = event.target.result;
-      video.muted = true;
-      video.autoplay = true;
-      video.loop = true;
-      video.playsInline = true;
-      elements.mediaPreviewContainer.appendChild(video);
-    } else {
-      const img = document.createElement('img');
-      img.src = event.target.result;
-      elements.mediaPreviewContainer.appendChild(img);
-    }
-    
-    elements.attachmentPreviewBar.style.display = 'flex';
-    elements.messageInput.placeholder = 'Add a caption... (optional)';
-    elements.messageInput.required = false;
-  };
+    const img = new Image();
+    img.onload = function() {
+      // Compress heavily for real-time WebSocket transfer
+      const maxDim = 500;
+      let width = img.width;
+      let height = img.height;
 
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      state.selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.55);
+      
+      elements.imagePreview.src = state.selectedImageBase64;
+      elements.attachmentPreviewBar.style.display = 'flex';
+      elements.messageInput.placeholder = 'Add a caption... (optional)';
+      elements.messageInput.required = false;
+    };
+    img.src = event.target.result;
+  };
   reader.readAsDataURL(file);
 }
 
-function clearFileAttachment() {
-  state.selectedFile = null;
+function clearImageAttachment() {
+  state.selectedImageBase64 = null;
   elements.fileInput.value = '';
   elements.attachmentPreviewBar.style.display = 'none';
-  elements.mediaPreviewContainer.innerHTML = '';
+  elements.imagePreview.src = '';
   elements.messageInput.placeholder = 'Type a secure message...';
   elements.messageInput.required = true;
 }
@@ -306,7 +300,7 @@ function closeLightbox() {
 window.openLightbox = openLightbox;
 
 // ==========================================================================
-// FORMS SUBMISSIONS
+// FORMS SUBMITS
 // ==========================================================================
 
 function handleNicknameSubmit(e) {
@@ -324,69 +318,28 @@ function handleNicknameSubmit(e) {
   connectWebSocket();
 }
 
-async function handleSendMessage(e) {
+function handleSendMessage(e) {
   e.preventDefault();
   
   const text = elements.messageInput.value.trim();
-  const file = state.selectedFile;
+  const image = state.selectedImageBase64;
   
-  if (!text && !file) return;
+  if (!text && !image) return;
 
-  // Toggle sending loader
-  elements.sendLoader.style.display = 'block';
-  elements.sendIcon.style.display = 'none';
-  elements.sendBtn.disabled = true;
-
-  let fileUrl = null;
-  let fileType = null;
-
-  try {
-    // If a media file is selected, upload it via the proxy endpoint
-    if (file) {
-      fileType = file.type;
-      const response = await fetch('/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type,
-          'X-Filename': file.name
-        },
-        body: file // Upload raw binary stream
-      });
-
-      if (!response.ok) {
-        throw new Error('Upload failed on server.');
-      }
-
-      const data = await response.json();
-      fileUrl = data.url;
-    }
-
-    // Send payload over WebSocket
-    if (state.socket && state.socket.readyState === WebSocket.OPEN) {
-      const payload = JSON.stringify({
-        type: 'message',
-        text: text,
-        fileUrl: fileUrl,
-        fileType: fileType
-      });
-      state.socket.send(payload);
-    } else {
-      alert("Cannot send message. Server is disconnected.");
-    }
-
-    // Reset composer form
-    elements.messageInput.value = '';
-    clearFileAttachment();
-
-  } catch (err) {
-    console.error('Failed to send message:', err);
-    alert('Failed to upload media. Please try again.');
-  } finally {
-    // Hide sending loader
-    elements.sendLoader.style.display = 'none';
-    elements.sendIcon.style.display = 'block';
-    elements.sendBtn.disabled = false;
+  if (state.socket && state.socket.readyState === WebSocket.OPEN) {
+    const payload = JSON.stringify({
+      type: 'message',
+      text: text,
+      image: image
+    });
+    state.socket.send(payload);
+  } else {
+    alert("Cannot send message. Server is disconnected.");
   }
+
+  // Reset Form
+  elements.messageInput.value = '';
+  clearImageAttachment();
 }
 
 // Bind Events
@@ -395,8 +348,8 @@ function bindEvents() {
   elements.composerForm.onsubmit = handleSendMessage;
   
   elements.attachBtn.onclick = () => elements.fileInput.click();
-  elements.fileInput.onchange = handleFileSelect;
-  elements.removePreviewBtn.onclick = clearFileAttachment;
+  elements.fileInput.onchange = handleImageSelect;
+  elements.removePreviewBtn.onclick = clearImageAttachment;
 
   elements.lightboxClose.onclick = closeLightbox;
   elements.lightboxModal.onclick = (e) => {
