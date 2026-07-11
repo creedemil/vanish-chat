@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VanishChat — Shared Ephemeral Messaging</title>
+  <!-- SEO & Styling Meta -->
+  <meta name="description" content="A real-time shared chat where all messages and pictures permanently vanish from the server after 7 days.">
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Ambient Gradient Background Shapes -->
+  <div class="bg-blur bg-blur-1"></div>
+  <div class="bg-blur bg-blur-2"></div>
+  <div class="bg-blur bg-blur-3"></div>
+
+  <!-- Nickname Entry Overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-card">
+      <div class="logo-icon-large">
+        <i data-lucide="shield-alert"></i>
+      </div>
+      <h2>Welcome to VanishChat</h2>
+      <p>Enter a nickname to enter the secure room. Everything you share here vanishes automatically after 7 days.</p>
+      
+      <form id="loginForm">
+        <input type="text" id="nicknameInput" placeholder="Choose a nickname..." required maxlength="15" autocomplete="off">
+        <input type="password" id="passwordInput" placeholder="Enter room password..." required autocomplete="off">
+        <button type="submit" class="btn btn-primary btn-block">Enter Chatroom</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App Layout -->
+  <div class="app-container">
+    
+    <!-- Main Chat Content Component -->
+    <main class="chat-main">
+      <!-- Chat Header -->
+      <header class="chat-header">
+        <div class="header-left">
+          <div class="active-channel-info">
+            <div class="channel-hash"><i data-lucide="message-square"></i></div>
+            <div>
+              <h2>Global Chatroom</h2>
+              <p class="channel-sub">All messages automatically vanish after 7 days</p>
+            </div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="status-badge status-disconnected" id="connBadge">
+            <span class="status-indicator"></span>
+            <span id="connText">Connecting...</span>
+          </span>
+        </div>
+      </header>
+
+      <!-- Voice Call Connection Panel -->
+      <div class="voice-bar" id="voiceBar">
+        <div class="voice-bar-left">
+          <button type="button" class="voice-btn voice-btn-disconnected" id="voiceBtn">
+            <i data-lucide="phone"></i> <span id="voiceBtnText">Join Call</span>
+          </button>
+          <span class="voice-status-text" id="voiceStatusText">Voice call inactive</span>
+        </div>
+        <div class="active-speakers" id="activeSpeakers">
+          <!-- Active speakers rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Message Area -->
+      <section class="messages-container" id="messagesContainer">
+        <!-- Messages rendered dynamically -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state-icon">
+            <i data-lucide="message-square-dashed"></i>
+          </div>
+          <h3>No messages yet</h3>
+          <p>Send a message below. It will automatically self-destruct in exactly 7 days.</p>
+        </div>
+      </section>
+
+      <!-- Image Attachment Preview Bar -->
+      <div class="attachment-preview-bar" id="attachmentPreviewBar">
+        <div class="preview-item">
+          <img id="imagePreview" src="" alt="Selected image preview">
+          <button class="remove-preview-btn" id="removePreviewBtn" aria-label="Remove image">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat Input Composer -->
+      <footer class="chat-composer">
+        <form class="composer-form" id="composerForm" autocomplete="off">
+          <div class="input-container">
+            <!-- Hidden File Input -->
+            <input type="file" id="fileInput" accept="image/*" class="hidden-input">
+            
+            <!-- File trigger button -->
+            <button type="button" class="composer-action-btn" id="attachBtn" title="Attach picture">
+              <i data-lucide="image"></i>
+            </button>
+            
+            <!-- Message Input Area -->
+            <input type="text" id="messageInput" placeholder="Type a secure message..." aria-label="Message text" required>
+            
+            <!-- Send Button -->
+            <button type="submit" class="send-btn" id="sendBtn" aria-label="Send message">
+              <i data-lucide="send"></i>
+            </button>
+          </div>
+        </form>
+      </footer>
+    </main>
+
+  </div>
+
+  <!-- Fullscreen Lightbox Modal -->
+  <div class="lightbox-modal" id="lightboxModal" aria-hidden="true">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close image">
+      <i data-lucide="x"></i>
+    </button>
+    <img id="lightboxImage" src="" alt="Fullscreen view">
+  </div>
+
+  <!-- Custom Javascript -->
+  <script src="app.js"></script>
+</body>
+</html>
