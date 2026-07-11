@@ -63,10 +63,7 @@ body {
   position: relative;
 }
 
-/* ==========================================================================
-   AMBIENT BLUR SHAPES (Visual Background)
-   ========================================================================== */
-
+/* Ambient Blur Shapes */
 .bg-blur {
   position: absolute;
   border-radius: 50%;
@@ -102,10 +99,7 @@ body {
   opacity: 0.08;
 }
 
-/* ==========================================================================
-   LOGIN / NICKNAME ENTRY OVERLAY
-   ========================================================================== */
-
+/* Login Overlay Form */
 .login-overlay {
   position: fixed;
   top: 0;
@@ -212,16 +206,13 @@ body {
   color: var(--text-muted);
 }
 
-/* ==========================================================================
-   MAIN APP CONTAINERS
-   ========================================================================== */
-
+/* App Containers */
 .app-container {
   display: flex;
   width: 95vw;
   height: 90vh;
   height: 90dvh;
-  max-width: 960px; /* Reduced width for unified focus */
+  max-width: 860px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-glass);
   border-radius: 24px;
@@ -232,10 +223,6 @@ body {
   overflow: hidden;
   position: relative;
 }
-
-/* ==========================================================================
-   CHAT MAIN COMPONENT
-   ========================================================================== */
 
 .chat-main {
   flex: 1;
@@ -304,7 +291,7 @@ body {
   gap: 12px;
 }
 
-/* Status indicator badge */
+/* Status Indicator */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -347,7 +334,7 @@ body {
   50% { opacity: 0.4; }
 }
 
-/* Button variants */
+/* Button UI */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -452,7 +439,7 @@ body {
   line-height: 1.5;
 }
 
-/* Message Bubble Layout */
+/* Message Wrapper bubble */
 .message-wrapper {
   display: flex;
   flex-direction: column;
@@ -492,7 +479,7 @@ body {
   color: var(--text-muted);
 }
 
-/* Expiry Countdown Indicator */
+/* Expiry Countdown */
 .message-expiry {
   display: inline-flex;
   align-items: center;
@@ -541,20 +528,15 @@ body {
   border-top-right-radius: 4px;
 }
 
-/* Image Attachment inside Bubble */
+/* Attachments inside Chat Bubble (Images/Videos) */
 .message-attachment {
   margin-top: 8px;
   border-radius: 12px;
   overflow: hidden;
   max-width: 100%;
-  max-height: 240px;
-  cursor: zoom-in;
+  max-height: 320px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: var(--transition-smooth);
-}
-
-.message-attachment:hover {
-  opacity: 0.9;
 }
 
 .message-attachment img {
@@ -562,6 +544,16 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
+  cursor: zoom-in;
+}
+
+.message-attachment video {
+  width: 100%;
+  max-height: 300px;
+  display: block;
+  outline: none;
+  background-color: #000;
+  border-radius: 12px;
 }
 
 /* Expiry decay visual bar inside message */
@@ -579,7 +571,7 @@ body {
 }
 
 /* ==========================================================================
-   IMAGE ATTACHMENT PREVIEW BAR
+   IMAGE/VIDEO ATTACHMENT PREVIEW BAR
    ========================================================================== */
 
 .attachment-preview-bar {
@@ -607,10 +599,17 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
-.preview-item img {
+#mediaPreviewContainer {
+  width: 100%;
+  height: 100%;
+}
+
+#mediaPreviewContainer img,
+#mediaPreviewContainer video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .remove-preview-btn {
@@ -730,6 +729,7 @@ body {
   cursor: pointer;
   transition: var(--transition-smooth);
   box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3);
+  position: relative;
 }
 
 .send-btn:hover {
@@ -746,6 +746,21 @@ body {
   width: 18px;
   height: 18px;
   margin-left: 2px;
+}
+
+/* Upload Loader spinner inside button */
+.btn-loader {
+  display: none;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ==========================================================================
@@ -856,126 +871,4 @@ body {
     width: 36px;
     height: 36px;
   }
-  
-  .voice-bar {
-    padding: 10px 16px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    width: 100%;
-  }
-}
-
-/* ==========================================================================
-   VOICE CALLING SYSTEM STYLES
-   ========================================================================== */
-
-.voice-bar {
-  background: rgba(15, 23, 42, 0.4);
-  border-bottom: 1px solid var(--border-glass);
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  backdrop-filter: var(--glass-blur);
-  z-index: 10;
-}
-
-.voice-bar-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.voice-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  font-family: var(--font-body);
-  transition: var(--transition-smooth);
-}
-
-.voice-btn i {
-  width: 14px;
-  height: 14px;
-}
-
-.voice-btn-disconnected {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-glass);
-  color: var(--text-primary);
-}
-
-.voice-btn-disconnected:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--border-glass-active);
-}
-
-.voice-btn-connected {
-  background: var(--danger);
-  color: white;
-  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
-  animation: voicePulsing 1.8s infinite ease-in-out;
-}
-
-@keyframes voicePulsing {
-  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
-  50% { box-shadow: 0 0 18px rgba(239, 68, 68, 0.7); }
-}
-
-.voice-btn-connected:hover {
-  background: #dc2626;
-}
-
-.voice-status-text {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-/* Speaker List Tags */
-.active-speakers {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.speaker-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  animation: scaleIn 0.25s ease forwards;
-}
-
-@keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.speaker-indicator-pulse {
-  width: 8px;
-  height: 8px;
-  background-color: var(--success);
-  border-radius: 50%;
-  box-shadow: 0 0 6px var(--success);
-  animation: greenSpeakingPulse 1.5s infinite ease-in-out;
-}
-
-@keyframes greenSpeakingPulse {
-  0%, 100% { transform: scale(0.9); opacity: 0.8; }
-  50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 10px var(--success); }
 }

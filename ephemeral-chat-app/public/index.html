@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>VanishChat — Shared Ephemeral Messaging</title>
   <!-- SEO & Styling Meta -->
-  <meta name="description" content="A real-time shared chat where all messages and pictures permanently vanish from the server after 7 days.">
+  <meta name="description" content="A real-time shared chat where all messages, pictures, and videos permanently vanish from the server after 7 days.">
   
   <!-- Premium Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,7 +31,7 @@
         <i data-lucide="shield-alert"></i>
       </div>
       <h2>Welcome to VanishChat</h2>
-      <p>Enter a nickname to enter the secure room. Everything you share here vanishes automatically after 7 days.</p>
+      <p>Enter your nickname and password to enter the secure room. Everything you share vanishes automatically after 7 days.</p>
       
       <form id="loginForm">
         <input type="text" id="nicknameInput" placeholder="Choose a nickname..." required maxlength="15" autocomplete="off">
@@ -65,19 +65,6 @@
         </div>
       </header>
 
-      <!-- Voice Call Connection Panel -->
-      <div class="voice-bar" id="voiceBar">
-        <div class="voice-bar-left">
-          <button type="button" class="voice-btn voice-btn-disconnected" id="voiceBtn">
-            <i data-lucide="phone"></i> <span id="voiceBtnText">Join Call</span>
-          </button>
-          <span class="voice-status-text" id="voiceStatusText">Voice call inactive</span>
-        </div>
-        <div class="active-speakers" id="activeSpeakers">
-          <!-- Active speakers rendered dynamically -->
-        </div>
-      </div>
-
       <!-- Message Area -->
       <section class="messages-container" id="messagesContainer">
         <!-- Messages rendered dynamically -->
@@ -90,11 +77,12 @@
         </div>
       </section>
 
-      <!-- Image Attachment Preview Bar -->
+      <!-- Image/Video Attachment Preview Bar -->
       <div class="attachment-preview-bar" id="attachmentPreviewBar">
         <div class="preview-item">
-          <img id="imagePreview" src="" alt="Selected image preview">
-          <button class="remove-preview-btn" id="removePreviewBtn" aria-label="Remove image">
+          <!-- Preview element holds image or video -->
+          <div id="mediaPreviewContainer"></div>
+          <button class="remove-preview-btn" id="removePreviewBtn" aria-label="Remove media">
             <i data-lucide="x"></i>
           </button>
         </div>
@@ -104,12 +92,12 @@
       <footer class="chat-composer">
         <form class="composer-form" id="composerForm" autocomplete="off">
           <div class="input-container">
-            <!-- Hidden File Input -->
-            <input type="file" id="fileInput" accept="image/*" class="hidden-input">
+            <!-- Hidden File Input supporting pictures & videos -->
+            <input type="file" id="fileInput" accept="image/*,video/*" class="hidden-input">
             
             <!-- File trigger button -->
-            <button type="button" class="composer-action-btn" id="attachBtn" title="Attach picture">
-              <i data-lucide="image"></i>
+            <button type="button" class="composer-action-btn" id="attachBtn" title="Attach picture or video">
+              <i data-lucide="paperclip"></i>
             </button>
             
             <!-- Message Input Area -->
@@ -117,7 +105,8 @@
             
             <!-- Send Button -->
             <button type="submit" class="send-btn" id="sendBtn" aria-label="Send message">
-              <i data-lucide="send"></i>
+              <i data-lucide="send" id="sendIcon"></i>
+              <span class="btn-loader" id="sendLoader"></span>
             </button>
           </div>
         </form>

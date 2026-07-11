@@ -2,20 +2,8 @@
 const state = {
   username: null,
   socket: null,
-  selectedImageBase64: null,
-  reconnectTimer: null,
-  
-  // Voice call properties (WebRTC Mesh)
-  isInCall: false,
-  localStream: null,
-  peerConnections: {}, // username -> RTCPeerConnection
-  voiceUsersList: [],
-  rtcConfig: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  }
+  selectedFile: null,
+  reconnectTimer: null
 };
 
 const EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
@@ -33,18 +21,16 @@ const elements = {
   fileInput: document.getElementById('fileInput'),
   attachBtn: document.getElementById('attachBtn'),
   attachmentPreviewBar: document.getElementById('attachmentPreviewBar'),
-  imagePreview: document.getElementById('imagePreview'),
+  mediaPreviewContainer: document.getElementById('mediaPreviewContainer'),
   removePreviewBtn: document.getElementById('removePreviewBtn'),
   emptyState: document.getElementById('emptyState'),
   
   connBadge: document.getElementById('connBadge'),
   connText: document.getElementById('connText'),
   
-  // Voice Controls
-  voiceBtn: document.getElementById('voiceBtn'),
-  voiceBtnText: document.getElementById('voiceBtnText'),
-  voiceStatusText: document.getElementById('voiceStatusText'),
-  activeSpeakers: document.getElementById('activeSpeakers'),
+  sendBtn: document.getElementById('sendBtn'),
+  sendIcon: document.getElementById('sendIcon'),
+  sendLoader: document.getElementById('sendLoader'),
   
   lightboxModal: document.getElementById('lightboxModal'),
   lightboxImage: document.getElementById('lightboxImage'),
@@ -52,7 +38,7 @@ const elements = {
 };
 
 // ==========================================================================
-// WEBSOCKET CONNECTION & PASSWORD AUTHENTICATION
+// WEBSOCKET SERVER CONNECTIONS
 // ==========================================================================
 
 function connectWebSocket() {
@@ -60,6 +46,7 @@ function connectWebSocket() {
     state.socket.close();
   }
 
+  // Detect SSL context
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}`;
 
@@ -69,9 +56,8 @@ function connectWebSocket() {
 
   state.socket.onopen = () => {
     updateConnectionStatus('connected');
-    console.log('Socket opened. Sending authentication...');
+    console.log('Socket connection established. Authenticating...');
     
-    // Send join payload with username and password
     const savedPassword = sessionStorage.getItem('vanishchat_password');
     state.socket.send(JSON.stringify({
       type: 'join',
@@ -91,7 +77,6 @@ function connectWebSocket() {
 
       if (data.type === 'auth-error') {
         alert(data.message);
-        // Clear saved session states on password error
         sessionStorage.removeItem('vanishchat_user');
         sessionStorage.removeItem('vanishchat_password');
         window.location.reload();
@@ -99,7 +84,6 @@ function connectWebSocket() {
       }
 
       if (data.type === 'history') {
-        // Clear message panel
         const wrappers = elements.messagesContainer.querySelectorAll('.message-wrapper');
         wrappers.forEach(el => el.remove());
         
@@ -129,45 +113,14 @@ function connectWebSocket() {
           elements.emptyState.style.display = 'flex';
         }
       }
-
-      // --- VOICE CALL COORDINATION EVENT ---
-      else if (data.type === 'voice-users-list') {
-        state.voiceUsersList = data.users.filter(u => u !== state.username);
-        renderSpeakersList(data.users);
-        
-        // If we are in voice, initiate P2P connections to any new participants who joined
-        if (state.isInCall) {
-          state.voiceUsersList.forEach(user => {
-            if (!state.peerConnections[user]) {
-              initiatePeerConnection(user, true); // We initiate offer to new users
-            }
-          });
-        }
-      }
-
-      // --- WEBRTC SIGNAL RELAY ---
-      else if (data.type === 'signal') {
-        const { from, signal } = data;
-        
-        // We only handle signals if we are currently inside the voice call
-        if (state.isInCall) {
-          handleIncomingSignal(from, signal);
-        }
-      }
-
     } catch (err) {
-      console.error('Error handling WebSocket message:', err);
+      console.error('Error handling socket message:', err);
     }
   };
 
   state.socket.onclose = () => {
     updateConnectionStatus('disconnected');
-    console.log('Lost connection. Retrying in 3 seconds...');
-    
-    // Disconnect voice calls if WebSocket closes
-    if (state.isInCall) {
-      leaveVoiceCall();
-    }
+    console.log('Socket connection lost. Reconnecting in 3 seconds...');
     
     if (!state.reconnectTimer) {
       state.reconnectTimer = setTimeout(connectWebSocket, 3000);
@@ -194,231 +147,32 @@ function updateConnectionStatus(status) {
 }
 
 // ==========================================================================
-// DISCORD-LIKE VOICE CALL ENGINE (WebRTC Mesh)
+// RENDERING MEDIA BUBBLES
 // ==========================================================================
 
-async function toggleVoiceCall() {
-  if (state.isInCall) {
-    leaveVoiceCall();
+function getCountdownText(timestamp) {
+  const elapsed = Date.now() - timestamp;
+  const remaining = EXPIRY_MS - elapsed;
+  
+  if (remaining <= 0) return 'Expired';
+  
+  const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+  
+  if (days > 0) {
+    return `${days}d ${hours}h left`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m left`;
   } else {
-    await joinVoiceCall();
+    return `${minutes}m left`;
   }
 }
 
-async function joinVoiceCall() {
-  if (state.socket.readyState !== WebSocket.OPEN) {
-    alert("Cannot join voice call: Server disconnected.");
-    return;
-  }
-
-  // Guard clause: Media devices require a secure connection (HTTPS)
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert("Voice calling requires a secure connection. Please make sure the URL starts with https://");
-    return;
-  }
-
-  try {
-    // Request microphone access
-    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    state.isInCall = true;
-    
-    // Update Button UI
-    elements.voiceBtn.className = 'voice-btn voice-btn-connected';
-    elements.voiceBtnText.textContent = 'Leave Call';
-    elements.voiceStatusText.textContent = 'Connected to Voice';
-
-    // Notify server we joined the call
-    state.socket.send(JSON.stringify({
-      type: 'voice-state',
-      joined: true
-    }));
-
-    // Initiate P2P connection to everyone currently in the call
-    state.voiceUsersList.forEach(user => {
-      initiatePeerConnection(user, true); // We are the initiator
-    });
-
-    console.log("Joined voice call successfully.");
-  } catch (error) {
-    console.error("Microphone access denied:", error);
-    alert("Microphone permission is required to join the voice call.");
-  }
+function formatMsgTime(timestamp) {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
-function leaveVoiceCall() {
-  state.isInCall = false;
-
-  // Stop local microphone tracks
-  if (state.localStream) {
-    state.localStream.getTracks().forEach(track => track.stop());
-    state.localStream = null;
-  }
-
-  // Close all peer connections
-  Object.keys(state.peerConnections).forEach(username => {
-    closePeerConnection(username);
-  });
-
-  // Notify server we left
-  if (state.socket && state.socket.readyState === WebSocket.OPEN) {
-    state.socket.send(JSON.stringify({
-      type: 'voice-state',
-      joined: false
-    }));
-  }
-
-  // Update Button UI
-  elements.voiceBtn.className = 'voice-btn voice-btn-disconnected';
-  elements.voiceBtnText.textContent = 'Join Call';
-  elements.voiceStatusText.textContent = 'Voice call inactive';
-  
-  console.log("Left voice call.");
-}
-
-// Initiate RTCPeerConnection
-function initiatePeerConnection(targetUsername, isInitiator) {
-  if (state.peerConnections[targetUsername]) {
-    closePeerConnection(targetUsername);
-  }
-
-  console.log(`Setting up WebRTC connection to: ${targetUsername} (Initiator: ${isInitiator})`);
-  const pc = new RTCPeerConnection(state.rtcConfig);
-  state.peerConnections[targetUsername] = pc;
-
-  // ICE candidates callback
-  pc.onicecandidate = (event) => {
-    if (event.candidate && state.socket.readyState === WebSocket.OPEN) {
-      state.socket.send(JSON.stringify({
-        type: 'signal',
-        to: targetUsername,
-        signal: { candidate: event.candidate }
-      }));
-    }
-  };
-
-  // Remote stream track listener
-  pc.ontrack = (event) => {
-    console.log(`Received remote audio stream track from ${targetUsername}`);
-    
-    // Check if audio element already exists for this peer
-    let audio = document.getElementById(`audio-${targetUsername}`);
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = `audio-${targetUsername}`;
-      audio.autoplay = true;
-      audio.style.display = 'none'; // Hidden audio elements
-      document.body.appendChild(audio);
-    }
-    
-    audio.srcObject = event.streams[0];
-  };
-
-  // Attach local mic tracks to peer connection
-  if (state.localStream) {
-    state.localStream.getTracks().forEach(track => {
-      pc.addTrack(track, state.localStream);
-    });
-  }
-
-  // Handle negotiation for initiator
-  if (isInitiator) {
-    pc.createOffer()
-      .then(offer => pc.setLocalDescription(offer))
-      .then(() => {
-        state.socket.send(JSON.stringify({
-          type: 'signal',
-          to: targetUsername,
-          signal: { sdp: pc.localDescription }
-        }));
-      })
-      .catch(err => console.error("WebRTC offer generation error:", err));
-  }
-}
-
-// Process WebRTC handshakes
-function handleIncomingSignal(from, signal) {
-  let pc = state.peerConnections[from];
-  
-  if (!pc) {
-    // We create a non-initiator connection if it doesn't exist yet
-    initiatePeerConnection(from, false);
-    pc = state.peerConnections[from];
-  }
-
-  if (signal.sdp) {
-    pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
-      .then(() => {
-        // If it's an offer, we must generate an answer
-        if (pc.remoteDescription.type === 'offer') {
-          pc.createAnswer()
-            .then(answer => pc.setLocalDescription(answer))
-            .then(() => {
-              state.socket.send(JSON.stringify({
-                type: 'signal',
-                to: from,
-                signal: { sdp: pc.localDescription }
-              }));
-            });
-        }
-      })
-      .catch(err => console.error("WebRTC SDP handshaking error:", err));
-  } 
-  
-  else if (signal.candidate) {
-    pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
-      .catch(err => console.error("WebRTC ICE addition error:", err));
-  }
-}
-
-function closePeerConnection(username) {
-  const pc = state.peerConnections[username];
-  if (pc) {
-    pc.close();
-    delete state.peerConnections[username];
-  }
-
-  // Cleanup remote audio node
-  const audio = document.getElementById(`audio-${username}`);
-  if (audio) {
-    audio.srcObject = null;
-    audio.remove();
-  }
-}
-
-// Update UI panel listing who is currently inside the voice call
-function renderSpeakersList(users) {
-  elements.activeSpeakers.innerHTML = '';
-  
-  if (users.length === 0) {
-    const span = document.createElement('span');
-    span.style.fontSize = '12px';
-    span.style.color = 'var(--text-muted)';
-    span.textContent = 'No speakers';
-    elements.activeSpeakers.appendChild(span);
-    return;
-  }
-
-  users.forEach(username => {
-    const tag = document.createElement('span');
-    tag.className = 'speaker-tag';
-    
-    // Add pulsing indicator dot
-    const pulseDot = document.createElement('span');
-    pulseDot.className = 'speaker-indicator-pulse';
-    
-    tag.appendChild(pulseDot);
-    
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = username === state.username ? `${username} (You)` : username;
-    tag.appendChild(nameSpan);
-    
-    elements.activeSpeakers.appendChild(tag);
-  });
-}
-
-// ==========================================================================
-// RENDER MESSAGE TIMELINE
-// ==========================================================================
 
 function appendMessageBubbleToDOM(msg) {
   const isSelf = msg.username === state.username;
@@ -427,7 +181,6 @@ function appendMessageBubbleToDOM(msg) {
   const remainingTime = EXPIRY_MS - (Date.now() - msg.timestamp);
   const isUrgent = remainingTime < 4 * 60 * 60 * 1000;
   
-  // Skip if already drawn
   if (elements.messagesContainer.querySelector(`.message-wrapper[data-id="${msg.id}"]`)) {
     return;
   }
@@ -439,13 +192,23 @@ function appendMessageBubbleToDOM(msg) {
   el.dataset.id = msg.id;
   el.setAttribute('data-timestamp', msg.timestamp);
   
+  // Render media attachments (images vs videos)
   let attachmentHTML = '';
-  if (msg.image) {
-    attachmentHTML = `
-      <div class="message-attachment" onclick="openLightbox('${msg.image}')">
-        <img src="${msg.image}" alt="Attached media">
-      </div>
-    `;
+  if (msg.fileUrl) {
+    const isVideo = msg.fileType && msg.fileType.startsWith('video/');
+    if (isVideo) {
+      attachmentHTML = `
+        <div class="message-attachment">
+          <video controls playsinline preload="metadata" src="${msg.fileUrl}"></video>
+        </div>
+      `;
+    } else {
+      attachmentHTML = `
+        <div class="message-attachment" onclick="openLightbox('${msg.fileUrl}')">
+          <img src="${msg.fileUrl}" alt="Attached image">
+        </div>
+      `;
+    }
   }
   
   el.innerHTML = `
@@ -470,7 +233,6 @@ function appendMessageBubbleToDOM(msg) {
   elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
 }
 
-// Escaping helper for security (avoid XSS)
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.innerText = text;
@@ -478,60 +240,53 @@ function escapeHtml(text) {
 }
 
 // ==========================================================================
-// IMAGE COMPRESSION & SELECTORS
+// FILE ATTACHMENT SELECTOR (IMAGES & VIDEOS)
 // ==========================================================================
 
-function handleImageSelect(e) {
+function handleFileSelect(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  state.selectedFile = file;
+  elements.mediaPreviewContainer.innerHTML = '';
+
+  const isVideo = file.type.startsWith('video/');
   const reader = new FileReader();
+
   reader.onload = function(event) {
-    const img = new Image();
-    img.onload = function() {
-      const maxDim = 500;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-
-      state.selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.55);
-      
-      elements.imagePreview.src = state.selectedImageBase64;
-      elements.attachmentPreviewBar.style.display = 'flex';
-      elements.messageInput.placeholder = 'Add a caption... (optional)';
-      elements.messageInput.required = false;
-    };
-    img.src = event.target.result;
+    if (isVideo) {
+      const video = document.createElement('video');
+      video.src = event.target.result;
+      video.muted = true;
+      video.autoplay = true;
+      video.loop = true;
+      video.playsInline = true;
+      elements.mediaPreviewContainer.appendChild(video);
+    } else {
+      const img = document.createElement('img');
+      img.src = event.target.result;
+      elements.mediaPreviewContainer.appendChild(img);
+    }
+    
+    elements.attachmentPreviewBar.style.display = 'flex';
+    elements.messageInput.placeholder = 'Add a caption... (optional)';
+    elements.messageInput.required = false;
   };
+
   reader.readAsDataURL(file);
 }
 
-function clearImageAttachment() {
-  state.selectedImageBase64 = null;
+function clearFileAttachment() {
+  state.selectedFile = null;
   elements.fileInput.value = '';
   elements.attachmentPreviewBar.style.display = 'none';
-  elements.imagePreview.src = '';
+  elements.mediaPreviewContainer.innerHTML = '';
   elements.messageInput.placeholder = 'Type a secure message...';
   elements.messageInput.required = true;
 }
 
 // ==========================================================================
-// LIGHTBOX MODAL PREVIEWS
+// LIGHTBOX FULLSCREEN PREVIEWS
 // ==========================================================================
 
 function openLightbox(imgSrc) {
@@ -551,7 +306,7 @@ function closeLightbox() {
 window.openLightbox = openLightbox;
 
 // ==========================================================================
-// FORMS SUBMITS & NICKNAME AUTHENTICATION
+// FORMS SUBMISSIONS
 // ==========================================================================
 
 function handleNicknameSubmit(e) {
@@ -566,59 +321,94 @@ function handleNicknameSubmit(e) {
   sessionStorage.setItem('vanishchat_password', password);
   
   elements.loginOverlay.classList.add('hidden');
-  
-  // Connect socket and login
   connectWebSocket();
 }
 
-function handleSendMessage(e) {
+async function handleSendMessage(e) {
   e.preventDefault();
   
   const text = elements.messageInput.value.trim();
-  const image = state.selectedImageBase64;
+  const file = state.selectedFile;
   
-  if (!text && !image) return;
+  if (!text && !file) return;
 
-  if (state.socket && state.socket.readyState === WebSocket.OPEN) {
-    const payload = JSON.stringify({
-      type: 'message',
-      text: text,
-      image: image
-    });
-    
-    state.socket.send(payload);
-  } else {
-    alert("Cannot send message. Server is disconnected.");
+  // Toggle sending loader
+  elements.sendLoader.style.display = 'block';
+  elements.sendIcon.style.display = 'none';
+  elements.sendBtn.disabled = true;
+
+  let fileUrl = null;
+  let fileType = null;
+
+  try {
+    // If a media file is selected, upload it via the proxy endpoint
+    if (file) {
+      fileType = file.type;
+      const response = await fetch('/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type,
+          'X-Filename': file.name
+        },
+        body: file // Upload raw binary stream
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed on server.');
+      }
+
+      const data = await response.json();
+      fileUrl = data.url;
+    }
+
+    // Send payload over WebSocket
+    if (state.socket && state.socket.readyState === WebSocket.OPEN) {
+      const payload = JSON.stringify({
+        type: 'message',
+        text: text,
+        fileUrl: fileUrl,
+        fileType: fileType
+      });
+      state.socket.send(payload);
+    } else {
+      alert("Cannot send message. Server is disconnected.");
+    }
+
+    // Reset composer form
+    elements.messageInput.value = '';
+    clearFileAttachment();
+
+  } catch (err) {
+    console.error('Failed to send message:', err);
+    alert('Failed to upload media. Please try again.');
+  } finally {
+    // Hide sending loader
+    elements.sendLoader.style.display = 'none';
+    elements.sendIcon.style.display = 'block';
+    elements.sendBtn.disabled = false;
   }
-
-  // Reset composer
-  elements.messageInput.value = '';
-  clearImageAttachment();
 }
 
-// Bind events
+// Bind Events
 function bindEvents() {
   elements.loginForm.onsubmit = handleNicknameSubmit;
   elements.composerForm.onsubmit = handleSendMessage;
   
   elements.attachBtn.onclick = () => elements.fileInput.click();
-  elements.fileInput.onchange = handleImageSelect;
-  elements.removePreviewBtn.onclick = clearImageAttachment;
+  elements.fileInput.onchange = handleFileSelect;
+  elements.removePreviewBtn.onclick = clearFileAttachment;
 
   elements.lightboxClose.onclick = closeLightbox;
   elements.lightboxModal.onclick = (e) => {
     if (e.target === elements.lightboxModal) closeLightbox();
   };
   
-  // Call trigger button click binding
-  elements.voiceBtn.onclick = toggleVoiceCall;
-
   document.onkeydown = (e) => {
     if (e.key === 'Escape') closeLightbox();
   };
 }
 
-// Initialize Application
+// Setup App
 function setupApp() {
   bindEvents();
   
@@ -631,7 +421,7 @@ function setupApp() {
     connectWebSocket();
   }
 
-  // Countdown refresher (runs every 10 seconds)
+  // Live countdown refresher running every 10 seconds
   setInterval(() => {
     const bubbles = elements.messagesContainer.querySelectorAll('.message-wrapper');
     bubbles.forEach(wrapper => {
